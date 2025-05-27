@@ -1,47 +1,71 @@
-import glob
 import pandas as pd
-import seaborn as sns
+from pathlib import Path
+import numpy as np
 import matplotlib.pyplot as plt
 
-# 1) CSV 파일 경로 지정 (필요에 따라 수정하세요)
-paths = glob.glob(r'C:\Users\jhlee\Desktop\Python\BasicLAB\combined.csv')  # 실제 CSV 위치에 맞추어 수정
+# 한글 폰트 설정 (Windows)
+plt.rcParams['font.family'] = 'Malgun Gothic'
+plt.rcParams['axes.unicode_minus'] = False
 
-# 2) 모든 파일 읽어서 하나의 DataFrame으로 병합
-df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+# 데이터 로드
+input_dir = Path("BasicLAB/bus_data_transfer")
+files = sorted(input_dir.glob("bus_congestion_2025*.csv"))
+df_list = [pd.read_csv(f) for f in files]
+df = pd.concat(df_list, ignore_index=True)
 
-# 3) 'on' 및 'off' 컬럼들만 추출하여 시간대별 합계 계산
-on_cols = [col for col in df.columns if col.endswith('on')]
-off_cols = [col for col in df.columns if col.endswith('off')]
+# 요일·시간별 평균 계산
+df_group = df.groupby(['요일', '시간'])['혼잡도'].mean().reset_index()
 
-hourly_on = df[on_cols].mean().reset_index()
-hourly_on.columns = ['hour_col', 'count']
-hourly_on['hour'] = hourly_on['hour_col'].str.slice(0, 2).astype(int)
-hourly_on['type'] = 'on'
+# 피벗 테이블 생성 및 정렬
+weekday_order = ['월', '화', '수', '목', '금', '토', '일']
+time_order = sorted(df_group['시간'].unique(), key=lambda t: int(t.replace('시', '')))
+pivot = df_group.pivot(index='시간', columns='요일', values='혼잡도')
+pivot = pivot.reindex(index=time_order, columns=weekday_order)
 
-hourly_off = df[off_cols].mean().reset_index()
-hourly_off.columns = ['hour_col', 'count']
-hourly_off['hour'] = hourly_off['hour_col'].str.slice(0, 2).astype(int)
-hourly_off['type'] = 'off'
+# 선그래프 그리기
+plt.figure(figsize=(10, 6))
+for day in weekday_order:
+    plt.plot(pivot.index, pivot[day], label=day)
+plt.xlabel("시간대")
+plt.ylabel("평균 혼잡도")
+plt.title("요일별 평균 혼잡도 추이")
+plt.legend(title="요일")
+plt.xticks(rotation=90)
+plt.tight_layout()
+plt.show()
 
-# 4) 온·오프 데이터를 하나로 합치기
-hourly_long = pd.concat([hourly_on, hourly_off], ignore_index=True)
+# 한글 폰트 설정 (Windows)
+plt.rcParams['font.family'] = 'Malgun Gothic'
+plt.rcParams['axes.unicode_minus'] = False
 
-# 5) Seaborn displot으로 겹쳐서 그리기
-sns.set_theme(style='whitegrid')
-g = sns.displot(
-    data=hourly_long,
-    x='hour',
-    weights='count',
-    hue='type',
-    bins=24,
-    discrete=True,
-    multiple='layer',
-    height=5,
-    aspect=1.8,
-)
+# 데이터 로드
+input_dir = Path("BasicLAB/bus_data_transfer")
+files = sorted(input_dir.glob("bus_congestion_2025*.csv"))
+if not files:
+    raise FileNotFoundError(f"No files found in {input_dir} matching pattern")
+df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
 
-g.set_axis_labels('Hour of Day', 'passangers (mean)')
-g.fig.suptitle('Hourly Onboardings vs Alightings', y=1.02)
-plt.xticks(range(24))
+# 1) Boxplot: 요일별 분포 시각화
+weekday_order = ['월', '화', '수', '목', '금', '토', '일']
+data_by_day = [df[df['요일'] == day]['혼잡도'].dropna().values for day in weekday_order]
+plt.figure()
+plt.boxplot(data_by_day, labels=weekday_order)
+plt.xlabel("요일")
+plt.ylabel("혼잡도")
+plt.title("요일별 혼잡도 분포")
+plt.tight_layout()
+plt.show()
+
+# 2) Bar chart: 요일별 평균 ± 표준오차 시각화
+grouped = df.groupby('요일')['혼잡도']
+means = grouped.mean().reindex(weekday_order)
+sems = grouped.sem().reindex(weekday_order)
+x = np.arange(len(weekday_order))
+plt.figure()
+plt.bar(x, means, yerr=sems, capsize=5)
+plt.xticks(x, weekday_order)
+plt.xlabel("요일")
+plt.ylabel("평균 혼잡도")
+plt.title("요일별 평균 혼잡도 (±표준오차)")
 plt.tight_layout()
 plt.show()
